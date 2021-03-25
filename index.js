@@ -163,7 +163,7 @@ app.all('*', async (req, res) => {
                 });
 
                 return;
-            } else if (requestMethod === "GET") {
+            } else if (requestMethod === "POST") {
                 let query = req.body.query
                 let params = req.body.params
 
@@ -171,26 +171,7 @@ app.all('*', async (req, res) => {
                     return res.status(400).send({ "message": "400: Bad Request", "code": 0 })
                 }
 
-                getConnection.query(query, params, function (error, results, fields) {
-                    let getQuery = QueryParser(error, results, fields)
-
-                    if (getQuery.error) {
-                        return res.status(400).send(getQuery)
-                    } else {
-                        return res.status(200).send(getQuery)
-                    }
-                });
-
-                return;
-            } else if (requestMethod === "GET") {
-                let query = req.body.query
-                let params = req.body.params
-
-                if (!query || !params) {
-                    return res.status(400).send({ "message": "400: Bad Request", "code": 0 })
-                }
-
-                getConnection.query(query, params, function (error, results, fields) {
+                postConnection.query(query, params, function (error, results, fields) {
                     let getQuery = QueryParser(error, results, fields)
 
                     if (getQuery.error) {
