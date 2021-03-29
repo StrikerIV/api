@@ -1,4 +1,4 @@
-const bodyParser = require("body-parser");
+const bodyParser = require("body-parser")
 const favicon = require('serve-favicon');
 const FormData = require('form-data');
 const express = require("express");
@@ -86,15 +86,18 @@ app.all('*', async (req, res) => {
             const response = await axios(`https://discord.com/api/users/@me`, { method: "GET", headers: { Authorization: `Bearer ${req.session.bearer_token}` } })
             const data = response.data
 
+            const guilds = await axios(`https://discord.com/api/users/@me/guilds`, { method: "GET", headers: { Authorization: `Bearer ${req.session.bearer_token}` } })
+
             if (!data.username) {
                 return res.redirect("/api/v1/auth")
             }
 
             if (!data.mfa_enabled) {
-                return res.status(401).send({ "message": "401: Unauthorized", "code": 0 })
+                return res.status(401).send({ "message": "401: Unauthorized", "code": 2 })
             }
 
-            return res.status(200).send({ "token": jwt.sign(data.id, config.session.secret) })
+            let isAdmin = config.administrators.includes(data.id)
+            return res.status(200).send({ "token": jwt.sign({ id: data.id, admin: isAdmin }, config.session.secret) })
         }
 
         if (requestUrl[2] == "discord-callback") {
@@ -118,13 +121,11 @@ app.all('*', async (req, res) => {
                 return res.redirect('/api/v1/auth');
 
             } catch (any) {
-                return res.status(401).send({ "message": "401: Unauthorized", "code": 0 })
+                return res.status(401).send({ "message": "401: Unauthorized", "code": 1 })
             }
         }
 
         if (requestUrl[2] == "database") {
-            //path is /api/v{}/database
-            //also eval authorization
 
             if (!req.headers.authorization) {
                 return res.status(401).send({ "message": "401: Unauthorized", "code": 0 })
@@ -144,11 +145,21 @@ app.all('*', async (req, res) => {
                 return res.status(401).send({ "message": "401: Unauthorized", "code": 0 })
             }
 
+            if (!token.admin) {
+                return res.status(403).send({ "message": "403: Forbidden", "code": 0 })
+            }
+
             if (requestMethod === "GET") {
                 let query = req.body.query
                 let params = req.body.params
 
                 if (!query || !params) {
+                    return res.status(400).send({ "message": "400: Bad Request", "code": 0 })
+                }
+
+                try {
+                    params = JSON.parse(params)
+                } catch (any) {
                     return res.status(400).send({ "message": "400: Bad Request", "code": 0 })
                 }
 
@@ -171,22 +182,9 @@ app.all('*', async (req, res) => {
                     return res.status(400).send({ "message": "400: Bad Request", "code": 0 })
                 }
 
-                postConnection.query(query, params, function (error, results, fields) {
-                    let getQuery = QueryParser(error, results, fields)
-
-                    if (getQuery.error) {
-                        return res.status(400).send(getQuery)
-                    } else {
-                        return res.status(200).send(getQuery)
-                    }
-                });
-
-                return;
-            } else if (requestMethod === "POST") {
-                let query = req.body.query
-                let params = req.body.params
-
-                if (!query || !params) {
+                try {
+                    params = JSON.parse(params)
+                } catch (any) {
                     return res.status(400).send({ "message": "400: Bad Request", "code": 0 })
                 }
 
@@ -201,11 +199,17 @@ app.all('*', async (req, res) => {
                 });
 
                 return;
-            } else if (requestMethod === "DELETE") {
+            } if (requestMethod === "DELETE") {
                 let query = req.body.query
                 let params = req.body.params
 
                 if (!query || !params) {
+                    return res.status(400).send({ "message": "400: Bad Request", "code": 0 })
+                }
+
+                try {
+                    params = JSON.parse(params)
+                } catch (any) {
                     return res.status(400).send({ "message": "400: Bad Request", "code": 0 })
                 }
 
@@ -220,6 +224,8 @@ app.all('*', async (req, res) => {
                 });
 
                 return;
+            } else {
+                return res.status(404).send({ "message": "404: Not Found", "code": 0 })
             }
         } else {
             return res.status(404).send({ "message": "404: Not Found", "code": 0 })
