@@ -134,7 +134,7 @@ app.all('*', async (req, res) => {
             let bearerToken = req.headers.authorization.split(" ")
 
             if (bearerToken[0] != "Bearer") {
-                return res.status(401).send({ "message": "401: Unauthorized", "code": 0 })
+                return res.status(401).send({ "message": "401: Unauthorized", "code": 1 })
             }
 
             let token = jwt.verify(bearerToken[1], config.session.secret, function (err, decoded) {
@@ -142,7 +142,7 @@ app.all('*', async (req, res) => {
             });
 
             if (!token) {
-                return res.status(401).send({ "message": "401: Unauthorized", "code": 0 })
+                return res.status(401).send({ "message": "401: Unauthorized", "code": 2 })
             }
 
             if (!token.admin) {
@@ -157,10 +157,8 @@ app.all('*', async (req, res) => {
                     return res.status(400).send({ "message": "400: Bad Request", "code": 0 })
                 }
 
-                try {
-                    params = JSON.parse(params)
-                } catch (any) {
-                    return res.status(400).send({ "message": "400: Bad Request", "code": 0 })
+                if (!Array.isArray(params)) {
+                    return res.status(400).send({ "message": "400: Bad Request", "code": 1 })
                 }
 
                 getConnection.query(query, params, function (error, results, fields) {
@@ -182,10 +180,8 @@ app.all('*', async (req, res) => {
                     return res.status(400).send({ "message": "400: Bad Request", "code": 0 })
                 }
 
-                try {
-                    params = JSON.parse(params)
-                } catch (any) {
-                    return res.status(400).send({ "message": "400: Bad Request", "code": 0 })
+                if (!Array.isArray(params)) {
+                    return res.status(400).send({ "message": "400: Bad Request", "code": 1 })
                 }
 
                 postConnection.query(query, params, function (error, results, fields) {
@@ -207,10 +203,8 @@ app.all('*', async (req, res) => {
                     return res.status(400).send({ "message": "400: Bad Request", "code": 0 })
                 }
 
-                try {
-                    params = JSON.parse(params)
-                } catch (any) {
-                    return res.status(400).send({ "message": "400: Bad Request", "code": 0 })
+                if (!Array.isArray(params)) {
+                    return res.status(400).send({ "message": "400: Bad Request", "code": 1 })
                 }
 
                 deleteConnection.query(query, params, function (error, results, fields) {
