@@ -1,8 +1,9 @@
-const bodyParser = require("body-parser")
+const tf = require('@tensorflow/tfjs-node');
 const favicon = require('serve-favicon');
-const FormData = require('form-data');
-const express = require("express");
 const jwt = require('jsonwebtoken');
+const express = require("express");
+const jpeg = require('jpeg-js');
+const nsfw = require('nsfwjs');
 const axios = require("axios");
 const path = require('path');
 
@@ -15,7 +16,36 @@ const app = express()
 const { getConnection, postConnection, deleteConnection } = initialize()
 const currentAPIVersion = config.currentAPIVersion
 
+let _model
+
 //functions
+const fetchImage = async (url) => {
+    return new Promise(async (result) => {
+        axios.get(url, {
+            responseType: 'arraybuffer'
+        })
+            .then(response => {
+                let buffer = Buffer.from(response.data, 'binary')
+                result(buffer)
+            })
+    })
+}
+
+const convert = async (img) => {
+    // Decoded image in UInt8 Byte array
+
+    const image = await jpeg.decode(img, true)
+    const numChannels = 3
+    const numPixels = image.width * image.height
+    const values = new Int32Array(numPixels * numChannels)
+
+    for (let i = 0; i < numPixels; i++)
+        for (let c = 0; c < numChannels; ++c)
+            values[i * numChannels + c] = image.data[i * 4 + c]
+
+    return tf.tensor3d(values, [image.height, image.width, numChannels], 'int32')
+}
+
 function FieldsParser(fields) {
     if (!fields) return null;
     let fieldsArray = []
@@ -49,8 +79,7 @@ function QueryParser(err, res, flds) {
 
 app.use(favicon(path.join(__dirname, 'favicon.ico')));
 app.use(require('express-session')(config.session))
-app.use(bodyParser.urlencoded({ extended: true }))
-app.use(bodyParser.json())
+app.use(express.urlencoded({ extended: true }))
 
 app.all('*', async (req, res) => {
 
@@ -125,29 +154,29 @@ app.all('*', async (req, res) => {
             }
         }
 
+        if (!req.headers.authorization) {
+            return res.status(401).send({ "message": "401: Unauthorized", "code": 0 })
+        }
+
+        let bearerToken = req.headers.authorization.split(" ")
+
+        if (bearerToken[0] != "Bearer") {
+            return res.status(401).send({ "message": "401: Unauthorized", "code": 1 })
+        }
+
+        let token = jwt.verify(bearerToken[1], config.session.secret, function (err, decoded) {
+            return err ? null : decoded
+        });
+
+        if (!token) {
+            return res.status(401).send({ "message": "401: Unauthorized", "code": 2 })
+        }
+
+        if (!token.admin) {
+            return res.status(403).send({ "message": "403: Forbidden", "code": 0 })
+        }
+
         if (requestUrl[2] == "database") {
-
-            if (!req.headers.authorization) {
-                return res.status(401).send({ "message": "401: Unauthorized", "code": 0 })
-            }
-
-            let bearerToken = req.headers.authorization.split(" ")
-
-            if (bearerToken[0] != "Bearer") {
-                return res.status(401).send({ "message": "401: Unauthorized", "code": 1 })
-            }
-
-            let token = jwt.verify(bearerToken[1], config.session.secret, function (err, decoded) {
-                return err ? null : decoded
-            });
-
-            if (!token) {
-                return res.status(401).send({ "message": "401: Unauthorized", "code": 2 })
-            }
-
-            if (!token.admin) {
-                return res.status(403).send({ "message": "403: Forbidden", "code": 0 })
-            }
 
             if (requestMethod === "GET") {
                 let query = req.body.query
@@ -221,14 +250,31 @@ app.all('*', async (req, res) => {
             } else {
                 return res.status(404).send({ "message": "404: Not Found", "code": 0 })
             }
-        } else {
-            return res.status(404).send({ "message": "404: Not Found", "code": 0 })
         }
 
+        if (requestUrl[2] == "nsfw") {
+            //functions for tensorflow
+
+            if (!req.body.image) return res.status(400).send({ error: "Missing image url.", code: 0 })
+
+            //get image buffer
+            const imageBuffer = await fetchImage(req.body.image)
+            const image = await convert(imageBuffer)
+            const predictions = await _model.classify(image)
+            image.dispose()
+            return res.status(200).json(predictions)
+
+        }
+
+        return res.status(404).send({ "message": "404: Not Found", "code": 0 })
     }
 
 });
 
-app.listen(PORT, function () {
+const load_model = async () => {
+    _model = await nsfw.load()
+}
+
+load_model().then(() => app.listen(PORT, function () {
     console.log(`Express server listening on port ${PORT}`)
-})
+}))
