@@ -2,7 +2,7 @@ const tf = require('@tensorflow/tfjs-node');
 const favicon = require('serve-favicon');
 const jwt = require('jsonwebtoken');
 const express = require("express");
-const jpeg = require('jpeg-js');
+const sharp = require('sharp');
 const nsfw = require('nsfwjs');
 const axios = require("axios");
 const path = require('path');
@@ -33,17 +33,18 @@ const fetchImage = async (url) => {
 
 const convert = async (img) => {
     // Decoded image in UInt8 Byte array
+    const sharpImage = await sharp(img)
+    const imageData = await sharpImage.metadata()
 
-    const image = await jpeg.decode(img, true)
     const numChannels = 3
-    const numPixels = image.width * image.height
+    const numPixels = imageData.width * imageData.height
     const values = new Int32Array(numPixels * numChannels)
 
     for (let i = 0; i < numPixels; i++)
         for (let c = 0; c < numChannels; ++c)
-            values[i * numChannels + c] = image.data[i * 4 + c]
+            values[i * numChannels + c] = sharpImage.options.input.buffer[i * 4 + c]
 
-    return tf.tensor3d(values, [image.height, image.width, numChannels], 'int32')
+    return tf.tensor3d(values, [imageData.height, imageData.width, numChannels], 'int32')
 }
 
 function FieldsParser(fields) {
