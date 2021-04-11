@@ -25,6 +25,7 @@ const fetchImage = async (url) => {
             responseType: 'arraybuffer'
         })
             .then(response => {
+                if (!response.headers['content-type'].includes("image")) return result(null);
                 let buffer = Buffer.from(response.data, 'binary')
                 result(buffer)
             })
@@ -256,10 +257,12 @@ app.all('*', async (req, res) => {
         if (requestUrl[2] == "nsfw") {
             //functions for tensorflow
 
-            if (!req.body.image) return res.status(400).send({ error: "Missing image url.", code: 0 })
+            if (!req.body.image) return res.status(400).send({ error: "Missing url.", code: 0 })
 
             //get image buffer
             const imageBuffer = await fetchImage(req.body.image)
+            if (!imageBuffer) return res.status(400).send({ error: "Malformed / invalid url.", code: 0 })
+
             const image = await convert(imageBuffer)
             const predictions = await _model.classify(image)
             image.dispose()
