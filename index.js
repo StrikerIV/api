@@ -1,3 +1,4 @@
+const toxicity = require('@tensorflow-models/toxicity');
 const tf = require('@tensorflow/tfjs-node');
 const favicon = require('serve-favicon');
 const jwt = require('jsonwebtoken');
@@ -15,8 +16,10 @@ const app = express()
 
 const { getConnection, postConnection, deleteConnection } = initialize()
 const currentAPIVersion = config.currentAPIVersion
+const threshold = 0.9;
 
-let _model
+let _nsfw
+let _toxicity
 
 //functions
 const fetchImage = async (url) => {
@@ -255,8 +258,6 @@ app.all('*', async (req, res) => {
         }
 
         if (requestUrl[2] == "nsfw") {
-            //functions for tensorflow
-
             if (!req.body.image) return res.status(400).send({ error: "Missing url.", code: 0 })
 
             //get image buffer
@@ -264,10 +265,19 @@ app.all('*', async (req, res) => {
             if (!imageBuffer) return res.status(400).send({ error: "Malformed / invalid url.", code: 0 })
 
             const image = await convert(imageBuffer)
-            const predictions = await _model.classify(image)
+            const predictions = await _nsfw.classify(image)
             image.dispose()
             return res.status(200).json(predictions)
 
+        }
+
+        if (requestUrl[2] == "toxicity") {
+            if (!Array.isArray(req.body.message)) {
+                return res.status(400).send({ error: "Missing message.", code: 0 })
+            }
+
+            const predictions = await _toxicity.classify(req.body.message)
+            return res.status(200).json(predictions)
         }
 
         return res.status(404).send({ "message": "404: Not Found", "code": 0 })
@@ -275,10 +285,11 @@ app.all('*', async (req, res) => {
 
 });
 
-const load_model = async () => {
-    _model = await nsfw.load()
+const load_models = async () => {
+    _nsfw = await nsfw.load()
+    _toxicity = await toxicity.load(threshold)
 }
 
-load_model().then(() => app.listen(PORT, function () {
+load_models().then(() => app.listen(PORT, function () {
     console.log(`Express server listening on port ${PORT}`)
 }))
