@@ -1,12 +1,13 @@
 const toxicity = require('@tensorflow-models/toxicity');
 const tf = require('@tensorflow/tfjs-node');
+const { spawn } = require('child_process');
 const favicon = require('serve-favicon');
 const jwt = require('jsonwebtoken');
 const express = require("express");
 const sharp = require('sharp');
-const nsfw = require('nsfwjs');
 const axios = require("axios");
 const path = require('path');
+const fs = require('fs');
 
 const { initialize } = require('./structures/DatabaseConnections');
 const config = require("./utils/config.json")
@@ -18,7 +19,6 @@ const { getConnection, postConnection, deleteConnection } = initialize()
 const currentAPIVersion = config.currentAPIVersion
 const threshold = 0.9;
 
-let _nsfw
 let _toxicity
 
 //functions
@@ -35,20 +35,15 @@ const fetchImage = async (url) => {
     })
 }
 
-const convert = async (img) => {
-    // Decoded image in UInt8 Byte array
-    const sharpImage = await sharp(img)
-    const imageData = await sharpImage.metadata()
+const fetchNSFWData = async (img) => {
+    const nsfw = spawn('py', ['nsfw.py', img]);
 
-    const numChannels = 3
-    const numPixels = imageData.width * imageData.height
-    const values = new Int32Array(numPixels * numChannels)
-
-    for (let i = 0; i < numPixels; i++)
-        for (let c = 0; c < numChannels; ++c)
-            values[i * numChannels + c] = sharpImage.options.input.buffer[i * 4 + c]
-
-    return tf.tensor3d(values, [imageData.height, imageData.width, numChannels], 'int32')
+    return new Promise(async (result) => {
+        nsfw.stdout.on('data', function (data) {
+            nsfwData = data.toString().replace(/["']/g, '"')
+            result(data.toString().replace(/["']/g, '"'))
+        });
+    })
 }
 
 function FieldsParser(fields) {
@@ -260,15 +255,19 @@ app.all('*', async (req, res) => {
         if (requestUrl[2] == "nsfw") {
             if (!req.body.image) return res.status(400).send({ error: "Missing url.", code: 0 })
 
+            //let fileNameParts = req.body.image.split("attachments/")[1].split("/")
+            //let fileName = `${fileNameParts[0] << fileNameParts[1]}.jpeg`
+            let fileName = '1.jpeg'
+
             //get image buffer
             const imageBuffer = await fetchImage(req.body.image)
             if (!imageBuffer) return res.status(400).send({ error: "Malformed / invalid url.", code: 0 })
 
-            const image = await convert(imageBuffer)
-            const predictions = await _nsfw.classify(image)
-            image.dispose()
-            return res.status(200).json(predictions)
+            await sharp(imageBuffer).toFile(`images/${fileName}`)
+            let data = await fetchNSFWData(fileName)
+            fs.unlink(`images/${fileName}`, (err) => { if (err) { throw err } });
 
+            return res.json(JSON.parse(data))
         }
 
         if (requestUrl[2] == "toxicity") {
@@ -280,13 +279,12 @@ app.all('*', async (req, res) => {
             return res.status(200).json(predictions)
         }
 
-        return res.status(404).send({ "message": "404: Not Found", "code": 0 })
+        //return res.status(404).send({ "message": "404: Not Found", "code": 0 })
     }
 
 });
 
 const load_models = async () => {
-    _nsfw = await nsfw.load()
     _toxicity = await toxicity.load(threshold)
 }
 
