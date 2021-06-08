@@ -222,6 +222,13 @@ app.all('*', async (req, res) => {
                     return res.status(400).send({ "message": "400: Bad Request", "code": 1 })
                 }
 
+                // parse nulls client side for default values input
+                params.forEach((param, index) => {
+                    if (param === 'null') {
+                        params[index] = null
+                    }
+                })
+
                 postConnection.query(query, params, function (error, results, fields) {
                     let getQuery = QueryParser(error, results, fields)
 
@@ -244,6 +251,13 @@ app.all('*', async (req, res) => {
                 if (!Array.isArray(params)) {
                     return res.status(400).send({ "message": "400: Bad Request", "code": 1 })
                 }
+
+                // parse nulls client side for default values input
+                params.forEach((param, index) => {
+                    if (param === 'null') {
+                        params[index] = null
+                    }
+                })
 
                 deleteConnection.query(query, params, function (error, results, fields) {
                     let getQuery = QueryParser(error, results, fields)
