@@ -10,7 +10,8 @@ const path = require('path');
 const fs = require('fs');
 
 const { initialize } = require('./structures/DatabaseConnections');
-const config = require("./utils/config.json")
+const config = require("./utils/config.json");
+const { URLSearchParams } = require('url');
 const PORT = process.env.PORT || 5000
 
 const app = express()
@@ -47,7 +48,7 @@ const fetchNSFWData = async (img) => {
 }
 
 function FieldsParser(fields) {
-    if (!fields) return null;
+    if (!fields || !fields[0]) return null;
     let fieldsArray = []
 
     fields.forEach(field => {
@@ -190,6 +191,14 @@ app.all('*', async (req, res) => {
                     return res.status(400).send({ "message": "400: Bad Request", "code": 1 })
                 }
 
+
+                // parse nulls client side for default values input
+                params.forEach((param, index) => {
+                    if (param === 'null') {
+                        params[index] = null
+                    }
+                })
+
                 getConnection.query(query, params, function (error, results, fields) {
                     let getQuery = QueryParser(error, results, fields)
 
@@ -284,10 +293,11 @@ app.all('*', async (req, res) => {
 
 });
 
-const load_models = async () => {
-    _toxicity = await toxicity.load(threshold)
-}
+// const load_models = async () => {
+//     _toxicity = await toxicity.load(threshold)
+// }
 
-load_models().then(() => app.listen(PORT, function () {
-    console.log(`Express server listening on port ${PORT}`)
-}))
+// load_models().then(() => 
+app.listen(PORT, function () {
+    console.log(`API listening on port ${PORT}`)
+})
